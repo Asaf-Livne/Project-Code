@@ -126,7 +126,7 @@ def model_run(gen, optimizer, train_data):
             torch.save(gen.state_dict(), f'gen_best_model.pt')
 
 def model_load(generator):
-    generator.load_state_dict(torch.load(f'gen_best_model'))
+    generator.load_state_dict(torch.load(f'gen_best_model.pt'))
     return generator
 
 def test_model(gen, data_path, sr):

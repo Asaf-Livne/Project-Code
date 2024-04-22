@@ -1,77 +1,74 @@
 from imports import *
-from audio_data_loading import AudioDataSet as audio_ds
+from audio_data_loading import AudioDataSet as adl
 from load_data import load_data, normalize_data
 
 # Parameter set #
 LR = 0.001
-EPOCHS_NUM = 150
+EPOCHS_NUM = 1000
 
 
 
 class WaveNetModel(nn.Module):
-    def __init__(self, num_blocks, dilation_depth, num_channels=16, skip_channels=16, kernel_size=1):
+    def __init__(self, num_blocks, dilation_layers, dilation_depth, num_channels=512, skip_channels=512, end_channels = 512, kernel_size=1):
 
         self.num_blocks = num_blocks
-        self.num_layers = dilation_depth
+        self.num_layers = dilation_layers
+        self.num_depth = dilation_depth
 
         super(WaveNetModel, self).__init__()
         self.casual_conv = nn.Conv1d(in_channels=1, out_channels=num_channels, kernel_size=1)
-        self.end_conv_1 = nn.Conv1d(in_channels=skip_channels, out_channels=8, kernel_size=1)
-        self.end_conv_2 = nn.Conv1d(in_channels=8, out_channels=1, kernel_size=1)
+        self.end_conv_1 = nn.Conv1d(in_channels=skip_channels, out_channels=end_channels, kernel_size=1)
+        self.end_conv_2 = nn.Conv1d(in_channels=end_channels, out_channels=1, kernel_size=1)
         # dilated conv
-        self.filter_convs = nn.ModuleList()
-        self.gate_convs = nn.ModuleList()
+        self.dilated_convs = nn.ModuleList()
         # 1*1 conv list for skip connection
         self.skip_convs = nn.ModuleList()
         # 1*1 conv list for residual connection
-        self.residual_conv = nn.ModuleList()
+        self.residual_convs = nn.ModuleList()
 
         for block_num in range(num_blocks):
-            filter_convs_block = nn.ModuleList()
-            gate_convs_block = nn.ModuleList()
-            skip_convs_block = nn.ModuleList()
-            residual_conv_block = nn.ModuleList()
-            for layer_num in range(dilation_depth):
-                filter_convs_block.append(nn.Conv1d(in_channels=num_channels, out_channels=num_channels*2, kernel_size=kernel_size, dilation=2**layer_num))
-                gate_convs_block.append(nn.Conv1d(in_channels=num_channels, out_channels=num_channels*2, kernel_size=kernel_size, dilation=2**layer_num))
-                skip_convs_block.append(nn.Conv1d(in_channels=num_channels*2, out_channels=skip_channels, kernel_size=kernel_size))
-                residual_conv_block.append(nn.Conv1d(in_channels=num_channels*2, out_channels=num_channels, kernel_size=kernel_size))
-            self.filter_convs.append(filter_convs_block)
-            self.gate_convs.append(gate_convs_block)
-            self.skip_convs.append(skip_convs_block)
-            self.residual_conv.append(residual_conv_block)
+            dilated_convs_block = nn.ModuleList()
+            for layer_num in range(dilation_layers):
+                for depth_num in range(dilation_depth):
+                    dilated_convs_block.append(nn.Conv1d(in_channels=num_channels, out_channels=num_channels, kernel_size=kernel_size, dilation=2**depth_num))
+            self.skip_convs.append(nn.Conv1d(in_channels=num_channels, out_channels=skip_channels, kernel_size=kernel_size))
+            self.residual_convs.append(nn.Conv1d(in_channels=num_channels, out_channels=num_channels, kernel_size=kernel_size))
+            self.dilated_convs.append(dilated_convs_block)
     
-    def wavenet_layer(self, x, block_num, layer_num):
-        residual = x 
-        filter = self.filter_convs[block_num][layer_num](x)
-        filter = F.tanh(filter)
-        gate = self.gate_convs[block_num][layer_num](x)
-        gate = F.sigmoid(gate)
-        x = filter * gate
-        return self.skip_convs[block_num][layer_num](x), self.residual_conv[block_num][layer_num](x), residual
+    def wavenet_block(self, x, block_num):
+        residual = x.clone()  # Clone x to avoid in-place operations
+        new_x = x.clone()  # Clone x to avoid in-place operations
+        for dilated_conv in self.dilated_convs[block_num]:
+            new_x = dilated_conv(new_x)
+        # Apply activation functions
+        filter = torch.tanh(new_x)
+        gate = torch.sigmoid(new_x)
+        new_x = filter * gate
+        # Compute skip and residual connections
+        skip = self.skip_convs[block_num](new_x)  # Assuming self.skip_conv is a single convolutional layer
+        res_conv = self.residual_convs[block_num](new_x)  # Assuming self.residual_conv is a single convolutional layer
+        residual += res_conv
+        return skip, residual
+
     
     def wavenet_end(self, skip_sum):
         x = F.relu(skip_sum)
-        #print(f"x after the first RELU is {x}")
         x = self.end_conv_1(x)
         x = F.relu(x)
-        #print(f"x is {x}")
-        return self.end_conv_2(x)
+        x = self.end_conv_2(x)
+        return x
 
 
     def forward(self, input):
-
         x = self.casual_conv(input)
         skip_sum = 0
         for block_num in range(self.num_blocks):
-            for layer_num in range(self.num_layers):
-             #   print(f"layer_num is {layer_num}")
-                skip, x, residual = self.wavenet_layer(x, block_num, layer_num)
-             #   print(f"after the wavenet layer -> x is {x}")
-                x += residual
-                skip_sum += skip
-       # print(f"x after the block and the layer num loop is {x}")
-        return self.wavenet_end(skip_sum)
+            skip, residual = self.wavenet_block(x, block_num)
+            x = residual
+        skip_sum += skip
+        output = self.wavenet_end(x)
+        #print (f'output is {output}')
+        return output
     
 def pre_emphasis_filter(x, coeff=0.95):
     return torch.cat((x, x - coeff * x), dim=1)
@@ -108,34 +105,51 @@ def concat_batch(batch):
                     arr.append(batch[i][j][k])
     return np.array(arr)
 
+def loss_fn(preds, labels):
+    return nn.MSELoss(preds, labels)
 
-def gen_train(gen, optimizer, train_data, epoch):
-    gen.train()
-    train_loss = 0.0
-    i = 0
-    gen_audio_np = []
-    clean_audio_np = []
-    fx_audio_np = []
-    for clean_batch, fx_batch in tqdm.tqdm(train_data):
-        if i == 0:
-            gen_audio_np = [gen(clean_batch[i]).detach().numpy() for i in range(len(clean_batch))]
-            gen_audio_np = concat_batch(gen_audio_np)
-            clean_audio_np = concat_batch(clean_batch)
-            fx_audio_np = concat_batch(fx_batch)
-        optimizer.zero_grad()
-        loss = batch_loss(gen, clean_batch, fx_batch)
-        train_loss += loss
-        loss.backward()
-        optimizer.step()
-        i += 1
-        print(f'train_loss = {(loss.item())}')
-    sf.write(f'model_results/gen_output_epoch_{epoch}.wav', gen_audio_np, 44100) 
-    if epoch == 0:
-        sf.write(f'model_results/clean_output.wav', clean_audio_np, 44100)
-        sf.write(f'model_results/fx_output.wav', fx_audio_np, 44100)
-  
-    return train_loss / len(train_data)
-
+def gen_train(gen, optimizer, train_data):
+    train_losses = []
+    for epoch in range(EPOCHS_NUM):
+        gen.train()
+        train_loss = 0.0
+        i = 0
+        for clean_batch, fx_batch in tqdm.tqdm(train_data):
+            if i == 0:
+                i += 1
+                continue
+            optimizer.zero_grad()
+            before_gen = time.time()
+            predictions = gen(clean_batch)
+            after_gen = time.time()
+            #print(f"Time for gen - {after_gen - before_gen}")
+            predictions = predictions.view(-1)
+            fx_batch = fx_batch.view(-1)
+            loss = mse_loss(predictions, fx_batch)
+            after_loss = time.time()
+            #print(f'time for loss - {after_loss - after_gen}')
+            train_loss += loss
+            loss.backward()
+            after_backward = time.time()
+            #print(f'time for backward - {after_backward - after_loss}')
+            optimizer.step()
+            after_step = time.time()
+            #print(f'time for step - {after_step - after_backward}')
+            #print(f"Loss - {loss}")
+           # print('\n')
+            if i == 2:
+                export_clean = clean_batch.view(-1)
+                export_fx = fx_batch
+                export_predictions = predictions.detach().numpy()
+            i += 1
+        train_losses.append(train_loss / len(train_data.dataset))
+        print(f"Epoch {epoch+1}/{EPOCHS_NUM}: gen_loss = {train_loss / len(train_data.dataset)}")
+        if epoch == 0:
+            sf.write(f'model_results/clean_batch.wav', export_clean, 44100)
+            sf.write(f'model_results/fx_batch.wav', export_fx, 44100)
+        sf.write(f'model_results/predictions_epoch_{epoch}.wav', export_predictions, 44100)
+    return train_losses
+'''
 # FIXME: Check if the generator and discriminatr are trained togerther
 def model_run(gen, optimizer, train_data):
     gen_best_loss = float('inf')
@@ -162,24 +176,24 @@ def test_model(gen, data_path, sr):
     print(gen_audio_np)
     sf.write(f'trained_out.wav', gen_audio_np, sr) 
     sf.write(f'test_data.wav', libro_data, sr) 
-
+'''
 
 def main(train):
-    blk_nums, dilation_depth = 2, 11
-    gen = WaveNetModel(num_blocks=blk_nums, dilation_depth=dilation_depth)
+    blk_nums, dilation_layers, dilation_depth = 2, 1, 8
+    gen = WaveNetModel(num_blocks=blk_nums, dilation_layers = dilation_layers, dilation_depth=dilation_depth)
     if train:
-        train_data = load_data('./Data/LW Clean.wav', './Data/LW Dist.wav', sr=44100, batch_size=10, bit_size=2)
-        gen = WaveNetModel(num_blocks=blk_nums, dilation_depth=dilation_depth)
-        optimizer = optim.Adam(gen.parameters(), lr=LR, weight_decay=1e-4)
-        model_run(gen, optimizer, train_data)
+        train_data = adl.data_loader('./Data/ts9_test1_in_FP32.wav', './Data/ts9_test1_out_FP32.wav', sec_sample_size= 0.5, sr=44100, batch_size=4, shuffle=False)
+        gen = WaveNetModel(num_blocks=blk_nums, dilation_layers=dilation_layers, dilation_depth=dilation_depth)
+        optimizer = optim.Adam(gen.parameters(), lr=LR)
+        gen_losses = gen_train(gen, optimizer, train_data)
         print("*************************")
         print(f'End of model training with learning rate - {LR}, block num - {blk_nums} and layers num - {dilation_depth}')
         print("*************************")
-    else:
+'''    else:
         gen = model_load(gen)
         test_model(gen, data_path='LW short.wav', sr=44100)
 
-
+'''
 
 
 if __name__ == '__main__':

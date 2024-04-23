@@ -7,9 +7,9 @@ class AudioDataSet(Dataset):
         self.sampling_rate= sr  # sampling rate
         self.sample_size = int(sec_sample_size * sr)
         self.clean_file, _ = librosa.load(clean_path, sr=self.sampling_rate)
-        self.clean_file = self.clean_file[sr:sr*31]
+        self.clean_file = self.clean_file[sr:]
         self.fx_file, _ = librosa.load(fx_path, sr=self.sampling_rate)
-        self.fx_file = self.fx_file[sr:sr*31]
+        self.fx_file = self.fx_file[sr:]
 
     def __getitem__(self, idx):
         clean_data = self.clean_file[idx * self.sample_size: (idx + 1) * self.sample_size]

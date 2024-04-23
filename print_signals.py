@@ -16,23 +16,25 @@ def create_graph(iter, valid = True):
 
 
     # Read audio data
-    clean_audio = librosa.load(clean_file, sr=44100)[0]
+    clean_audio = librosa.load(clean_file, sr=44100)[0] * -1
     fx_audio = librosa.load(fx_file, sr=44100)[0]
     gen_audio = librosa.load(gen_file, sr=44100)[0]
     if valid:
         gen_init = librosa.load(gen_init, sr=44100)[0]
-    '''
-    # Ensure all audio data have the same length (trim or pad if necessary)
-    min_length = min(len(clean_audio), len(fx_audio), len(gen_audio), len(gen_init))
-    clean_batch_0 = clean_audio[:min_length]
-    fx_batch_0 = fx_audio[:min_length]
+    
+    #Ensure all audio data have the same length (trim or pad if necessary)
+    if valid:
+        min_length = min(len(clean_audio), len(fx_audio), len(gen_audio), len(gen_init))
+    else:
+        min_length = min(len(clean_audio), len(fx_audio), len(gen_audio))
+    clean_audio = clean_audio[:min_length]
+    fx_audio = fx_audio[:min_length]
     gen_audio = gen_audio[:min_length]
-    gen_init = gen_init[:min_length]
-    print (clean_batch_0)
-    print (gen_audio)
+    if valid:
+        gen_init = gen_init[:min_length]
     # Create time array (assuming sample rate of 44100 Hz)
-    '''
-    time = np.arange(0, 2 * 44100) / 441000 # 20 seconds
+    
+    time = np.arange(0, min_length) / 441000 # 20 seconds
 
     # Plot audio data
     plt.figure(figsize=(10, 6))
@@ -49,4 +51,4 @@ def create_graph(iter, valid = True):
     plt.show()
 
 
-create_graph(6, False)
+create_graph(4, valid = True)

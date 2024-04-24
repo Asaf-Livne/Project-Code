@@ -110,7 +110,6 @@ def write_audio(clean, fx, predictions, epoch, training='training'):
     sf.write(f'model_results/{training}_predictions_epoch_{epoch+1}.wav', export_predictions, 44100)
 
 
-
 def train_epoch(model, train_data, optimizer, device, epoch):
     model.train()
     train_losses = []
@@ -172,7 +171,6 @@ def model_run(gen, optimizer, train_data):
             torch.save(gen.state_dict(), f'gen_best_model.pt')
 
 
-
 def model_load(generator):
     generator.load_state_dict(torch.load(f'gen_best_model.pt'))
     return generator
@@ -194,12 +192,10 @@ def test_model(gen, data_path, sr):
 def main(train, cuda=False):
     dilation_repeats, dilation_depth = 2, 9
     gen = WaveNetModel(dilation_repeats = dilation_repeats, dilation_depth=dilation_depth)
-    if torch.cuda.is_available and cuda:
-        print ("GPU")
-        device = torch.device("cuda:0")
-    else:
-        device = torch.device("cpu")
-        print ("CPU")
+    # Google Colab credit check
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    if(device == 'cuda'): print('Running on GPU')
+    else: print('Running on CPU')
     gen = gen.to(device)
     if train:
         train_data = adl.data_loader('./Data/clean_train.wav', './Data/fx_train.wav', sec_sample_size = 0.1, sr=44100, batch_size=20, shuffle=True)
@@ -212,8 +208,6 @@ def main(train, cuda=False):
     else:
         gen = model_load(gen)
         test_model(gen, data_path='LW short.wav', sr=44100)
-
-
 
 
 if __name__ == '__main__':

@@ -2,14 +2,14 @@ from audio_data_loading import AudioDataSet as adl
 from imports import *
 
 
-clean_file = './Data/LW Clean.wav'
-dist_file = './Data/LW Dist.wav'
+clean_file = './Data/ts9_test1_in_FP32.wav'
+dist_file = './Data/ts9_test1_out_FP32.wav'
 
 dataset = adl(clean_file, dist_file, sr = 44100, sec_sample_size = 300)
 
 print (len(dataset.clean_file))
 
-val_perc = int(len(dataset.clean_file) * 0.3)
+val_perc = int(len(dataset.clean_file) * 0.2)
 
 
 clean_val = dataset.clean_file[:val_perc]

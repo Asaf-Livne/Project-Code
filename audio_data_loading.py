@@ -1,7 +1,8 @@
 from imports import *
+import random
 
 class AudioDataSet(Dataset):
-    def __init__(self, clean_path, fx_path, sec_sample_size, sr=44100):
+    def __init__(self, clean_path, fx_path, sec_sample_size, sr=44100, scramble=False):
         self.clean_path = clean_path
         self.fx_path = fx_path
         self.sampling_rate= sr  # sampling rate
@@ -12,6 +13,13 @@ class AudioDataSet(Dataset):
         self.fx_file, _ = librosa.load(fx_path, sr=self.sampling_rate)
         if self.fx_file.dtype == 'int16':
             self.fx_file = self.fx_file.astype('float32')
+        self.scramble = scramble
+        if self.scramble:
+            # Shuffle the indices of the fx_file for scrambling
+            self.fx_indices = np.arange(len(self.clean_file) // self.sample_size)
+            random.shuffle(self.fx_indices)
+        else:
+            self.fx_indices = np.arange(len(self.clean_file) // self.sample_size)
 
     def __getitem__(self, idx):
         clean_data = self.clean_file[idx * self.sample_size: (idx + 1) * self.sample_size]
@@ -27,13 +35,8 @@ class AudioDataSet(Dataset):
         return data / (np.max(np.abs(data) + 0.0001))
         
 
-    def data_loader(clean_path, fx_path, sec_sample_size = 1, sr = 44100, batch_size=10, shuffle=False):
-        dataset = AudioDataSet(clean_path, fx_path, sec_sample_size, sr)
+    def data_loader(clean_path, fx_path, sec_sample_size = 1, sr = 44100, batch_size=10, shuffle=False, scramble=False):
+        dataset = AudioDataSet(clean_path, fx_path, sec_sample_size, sr, scramble)
         return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
-    
-    def infinite_batch(self, dataset):
-        while True:
-            for clean, fx in dataset:
-                yield clean, fx
                 
 

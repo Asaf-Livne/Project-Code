@@ -8,16 +8,20 @@
 from imports import *
 
 class Discriminator(nn.Module):
-    def __init__(self):
+    def __init__(self, kernel, stride, linear_size):
         super(Discriminator, self).__init__()
         self.seq = nn.Sequential(
-            Layer(128, 32, 10, 1, 1),
-            Layer(32, 128, 21, 1, 1),
-            Layer(128, 512, 21, 1, 1),
-            Layer(512, 1024, 21, 1, 1),
-            Layer(1024, 1024, 21, 1, 1),
-            Layer(1024, 1024, 5, 1, 1),
-            Layer(1024, 1, 3, 1, 1),
+            ConvLayer(1, 256, kernel, stride, 1),
+            nn.MaxPool2d(2, 2),
+            ConvLayer(256, 512, 5, 1, 1),
+            nn.MaxPool2d(2, 2),
+            ConvLayer(512, 512, 3, 1, 1),
+            nn.MaxPool2d(2, 2),
+            ConvLayer(512, 512, 3, 1, 1),
+            nn.MaxPool2d(2,2),
+            nn.Linear(linear_size, 128),
+            nn.LeakyReLU(0.2),
+            nn.Linear(128, 1),
             nn.Tanh()
         )
     
@@ -27,12 +31,13 @@ class Discriminator(nn.Module):
         return self.seq(x)
     
 
-class Layer(nn.Module):
+class ConvLayer(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, stride, padding):
-        super(Layer, self).__init__()
+        super(ConvLayer, self).__init__()
         self.layer = nn.Sequential(
-            nn.Conv1d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, stride=stride, padding=padding),
-            nn.BatchNorm1d(out_channels),
+            nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding),
+            nn.BatchNorm2d(out_channels),
+            nn.Dropout(0.5),
             nn.LeakyReLU(0.2)
         )
     

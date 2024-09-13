@@ -1,23 +1,31 @@
-from audio_data_loading import AudioDataSet as adl
-from imports import *
+import torch
+import torchaudio
+import train
+# load DB01 and split it to train and validation
 
 
-clean_file = './Data/ts9_test1_in_FP32.wav'
-dist_file = './Data/ts9_test1_out_FP32.wav'
+clean, sr = torchaudio.load('../Data/DB01/DB01 Clean.wav')
+distortion, sr = torchaudio.load('../Data/DB01/DB01 EQ.wav')
 
-dataset = adl(clean_file, dist_file, sr = 44100, sec_sample_size = 300)
+# Split 80% of the data for training and 20% for validation
+print(clean.shape)
+print(distortion.shape)
+# convert distortion to mono
+distortion = distortion.mean(dim=0, keepdim=True)
+print(distortion.shape)
+# Match data lengths
+min_length = min(clean.size(1), distortion.size(1))
+clean = clean[:, :min_length]
+distortion = distortion[:, :min_length]
+# Split
+val_size = int(0.2 * clean.size(1))
+clean_val = clean[:, :val_size]
+distortion_val = distortion[:, :val_size]
+clean_train = clean[:, val_size:]
+distortion_train = distortion[:, val_size:]
 
-print (len(dataset.clean_file))
-
-val_perc = int(len(dataset.clean_file) * 0.2)
-
-
-clean_val = dataset.clean_file[:val_perc]
-clean_train = dataset.clean_file[val_perc:]
-fx_val = dataset.fx_file[:val_perc]
-fx_train = dataset.fx_file[val_perc:]
-
-sf.write(f'./Data/clean_train.wav', clean_train, 44100)
-sf.write(f'./Data/clean_val.wav', clean_val, 44100)
-sf.write(f'./Data/fx_train.wav', fx_train, 44100)
-sf.write(f'./Data/fx_val.wav', fx_val, 44100)
+# Save the training and validation data
+torchaudio.save('../Data/clean_train.wav', clean_train, sr)
+torchaudio.save('../Data/equalizer_train.wav', distortion_train, sr)
+torchaudio.save('../Data/clean_val.wav', clean_val, sr)
+torchaudio.save('../Data/equalizer_val.wav', distortion_val, sr)

@@ -15,3 +15,9 @@ def write_audio(clean, fx, predictions, epoch, training='training'):
         if epoch == 1:
             sf.write(f'model_results/{training}_clean_batch.wav', export_clean, 44100)
             sf.write(f'model_results/{training}_fx_batch.wav', export_fx, 44100)
+
+
+def load_pkl(filename):
+    with open(filename, 'rb') as f:
+        return pickle.load(f)
+

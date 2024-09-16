@@ -88,6 +88,9 @@ class EffectiveMLApp(QWidget):
         self.load_model_text.setReadOnly(True)
         self.status_text.setReadOnly(True)
 
+        #main_layout.addWidget(self.status_text) (Debug Only)
+
+
         self.load_audio_text.setStyleSheet("font-family:Lucida Sans; font-size:14px; color: #272532; font-style: italic; text-align: left;padding-left: 30 px;border:none;")
         self.load_audio_text.setFixedHeight(30)
         #self.load_audio_text.setFixedWidth(300)
@@ -342,6 +345,7 @@ class EffectiveMLApp(QWidget):
         original_audio_path = self.audio_clean_file
         fx_audio_path = self.audio_fx_file
         processed_audio_path = "./model_results/test_predictions_epoch_1.wav"  # Replace with the actual path to the processed file
+        processed_audio_path = os.path.abspath(processed_audio_path)
 
         # Connect the buttons to play the corresponding audio files
         original_button.clicked.connect(lambda: self.play_audio(original_audio_path))
